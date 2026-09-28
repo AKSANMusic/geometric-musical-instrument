@@ -1,0 +1,18 @@
+{
+  "name": "pentagon-sequencer",
+  "version": "1.0.0",
+  "description": "Physics-based generative algorithmic music sequencer using nested irregular cyclic pentagons with Just Intonation harmonic mapping",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}

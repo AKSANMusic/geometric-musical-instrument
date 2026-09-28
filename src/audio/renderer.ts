@@ -1,0 +1,250 @@
+import type { CollisionEvent, NoteEvent, Edge } from '../types';
+import { collisionToNote } from './note-mapper';
+import { VoiceAllocator } from './voice-allocator';
+import { ReverbEffect } from './reverb';
+import type { FMVoice } from './fm-synth';
+
+/**
+ * Top-level audio renderer: receives CollisionEvents, converts to NoteEvents,
+ * and routes them through the physical voice allocator, wooden soundboard EQ,
+ * and lush stereo acoustic convolution reverb.
+ */
+export class AudioRenderer {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private reverb: ReverbEffect | null = null;
+  private allocator: VoiceAllocator | null = null;
+  private activeKeyVoices = new Map<string, FMVoice[]>();
+  private _initialized = false;
+
+  get initialized(): boolean {
+    return this._initialized;
+  }
+
+  /**
+   * Initialize the Web Audio context. Must be called from a user gesture.
+   */
+  async init(
+    maxVoices = 32,
+    minIOI = 20,
+    noteDuration = 1.8,
+    reverbMix = 0.38,
+    presetKey = 'santur',
+  ): Promise<void> {
+    if (this._initialized) return;
+
+    this.ctx = new AudioContext();
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = 0.7;
+
+    // 20Hz DC-blocking filter to prevent subsonic rumble and DC offset
+    const dcBlocker = this.ctx.createBiquadFilter();
+    dcBlocker.type = 'highpass';
+    dcBlocker.frequency.value = 20;
+    dcBlocker.Q.value = 0.707;
+
+    this.masterGain.connect(dcBlocker);
+    dcBlocker.connect(this.ctx.destination);
+
+    // Lush acoustic reverb & wooden body simulation
+    this.reverb = new ReverbEffect(this.ctx, reverbMix);
+    this.reverb.connect(this.masterGain);
+
+    this.allocator = new VoiceAllocator(
+      this.ctx,
+      this.reverb.input,
+      maxVoices,
+      minIOI,
+      noteDuration,
+      presetKey,
+    );
+
+    this._initialized = true;
+  }
+
+  /** Expose the active AudioContext (for sample-accurate timing) */
+  getAudioContext(): AudioContext | null {
+    return this.ctx;
+  }
+
+  /**
+   * Process a batch of collision events from the physics engine.
+   */
+  processCollisions(events: CollisionEvent[]): NoteEvent[] {
+    if (!this.allocator) return [];
+    const notes: NoteEvent[] = [];
+    for (const event of events) {
+      const note = collisionToNote(event);
+      if (this.allocator.trigger(note)) {
+        notes.push(note);
+      }
+    }
+    return notes;
+  }
+
+  /**
+   * Manually pluck/play a note on a specific edge.
+   *
+   * @param edge - Target polygon edge
+   * @param pentagonLevel - Level of the concentric ring
+   * @param param - Strike position along the edge [0, 1]
+   * @param velocity - MIDI velocity [1, 127]
+   * @param totalEdges - Total edges in this polygon ring
+   * @param scheduledTime - Optional AudioContext time for sample-accurate strumming
+   */
+  triggerManualNote(
+    edge: Edge,
+    pentagonLevel: number,
+    param: number,
+    velocity = 95,
+    totalEdges = 5,
+    scheduledTime?: number,
+  ): NoteEvent | null {
+    if (!this.allocator) return null;
+
+    const freq = edge.frequency;
+    const midiNote = Math.round(69 + 12 * Math.log2(freq / 440));
+    // Parabolic timbre curve: warm at center (1), bright at tips (0)
+    const brightness = 1 - 4 * (param - 0.5) ** 2;
+    const maxIdx = Math.max(1, totalEdges - 1);
+    const pan = (2 * edge.index) / maxIdx - 1;
+
+    const noteTimestamp = scheduledTime !== undefined
+      ? scheduledTime
+      : (this.ctx ? this.ctx.currentTime : performance.now() / 1000);
+
+    const note: NoteEvent = {
+      frequency: freq,
+      midiNote,
+      midiVelocity: Math.min(127, Math.max(1, velocity)),
+      brightness: Math.max(0, Math.min(1, brightness)),
+      pentagonLevel,
+      edgeIndex: edge.index,
+      timestamp: noteTimestamp,
+      pan,
+    };
+
+    if (this.allocator.trigger(note, scheduledTime)) {
+      return note;
+    }
+    return null;
+  }
+
+  /**
+   * Start a sustained note held down by a key or chord button.
+   * Remains sounding until stopKeyNote(keyId) is called.
+   */
+  startKeyNote(
+    keyId: string,
+    edge: Edge,
+    pentagonLevel: number,
+    param = 0.5,
+    velocity = 95,
+    totalEdges = 5,
+    scheduledTime?: number,
+  ): NoteEvent | null {
+    if (!this.allocator) return null;
+
+    const freq = edge.frequency;
+    const midiNote = Math.round(69 + 12 * Math.log2(freq / 440));
+    const brightness = 1 - 4 * (param - 0.5) ** 2;
+    const maxIdx = Math.max(1, totalEdges - 1);
+    const pan = (2 * edge.index) / maxIdx - 1;
+
+    const noteTimestamp = scheduledTime !== undefined
+      ? scheduledTime
+      : (this.ctx ? this.ctx.currentTime : performance.now() / 1000);
+
+    const note: NoteEvent = {
+      frequency: freq,
+      midiNote,
+      midiVelocity: Math.min(127, Math.max(1, velocity)),
+      brightness: Math.max(0, Math.min(1, brightness)),
+      pentagonLevel,
+      edgeIndex: edge.index,
+      timestamp: noteTimestamp,
+      pan,
+    };
+
+    const voice = this.allocator.trigger(note, scheduledTime);
+    if (voice) {
+      const list = this.activeKeyVoices.get(keyId) || [];
+      list.push(voice);
+      this.activeKeyVoices.set(keyId, list);
+      return note;
+    }
+    return null;
+  }
+
+  /**
+   * Smoothly release all voices associated with a held key or chord.
+   */
+  stopKeyNote(keyId: string, releaseSec?: number): void {
+    const list = this.activeKeyVoices.get(keyId);
+    if (!list) return;
+    for (const v of list) {
+      v.release(releaseSec);
+    }
+    this.activeKeyVoices.delete(keyId);
+  }
+
+  /** Release all currently held key notes */
+  stopAllKeyNotes(): void {
+    for (const list of this.activeKeyVoices.values()) {
+      for (const v of list) {
+        v.release();
+      }
+    }
+    this.activeKeyVoices.clear();
+  }
+
+  /** Set reverb wet mix level [0, 1] */
+  setReverbMix(mix: number): void {
+    this.reverb?.setMix(mix);
+  }
+
+  /** Set note sustain duration in seconds */
+  setNoteDuration(duration: number): void {
+    this.allocator?.setNoteDuration(duration);
+  }
+
+  /** Switch acoustic instrument preset */
+  setInstrumentPreset(presetKey: string): void {
+    this.allocator?.setPreset(presetKey);
+  }
+
+  /** Set master volume (0 to 1). Uses ramped transition to prevent zipper noise. */
+  setVolume(vol: number): void {
+    if (this.masterGain && this.ctx) {
+      const clamped = Math.max(0, Math.min(1, vol));
+      const now = this.ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+      this.masterGain.gain.linearRampToValueAtTime(clamped, now + 0.02);
+    }
+  }
+
+  /** Get active voice count. */
+  get activeVoices(): number {
+    return this.allocator?.activeVoices ?? 0;
+  }
+
+  /** Stop all audio. */
+  stopAll(): void {
+    this.allocator?.stopAll();
+  }
+
+  /** Close the audio context entirely. */
+  async dispose(): Promise<void> {
+    this.stopAll();
+    if (this.ctx) {
+      await this.ctx.close();
+      this.ctx = null;
+    }
+    this._initialized = false;
+  }
+}

@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pentagon Sequencer — Generative Music</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a14;
+      color: #c8c8ff;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 18px;
+      background: rgba(10, 10, 20, 0.95);
+      border-bottom: 1px solid rgba(100, 200, 255, 0.15);
+      z-index: 10;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      color: rgba(100, 200, 255, 0.95);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .control-group label {
+      font-size: 10px;
+      color: rgba(200, 200, 255, 0.55);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .control-group input[type="range"] {
+      width: 65px;
+      accent-color: rgba(100, 200, 255, 0.7);
+    }
+
+    .control-group select {
+      background: rgba(20, 20, 42, 0.85);
+      color: #c8c8ff;
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      padding: 3px 6px;
+      font-size: 11px;
+      font-family: inherit;
+      border-radius: 3px;
+    }
+
+    button {
+      background: rgba(100, 200, 255, 0.12);
+      color: rgba(100, 200, 255, 0.9);
+      border: 1px solid rgba(100, 200, 255, 0.3);
+      padding: 5px 14px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.15s;
+    }
+    button:hover {
+      background: rgba(100, 200, 255, 0.25);
+      border-color: rgba(100, 200, 255, 0.6);
+    }
+    button.active {
+      background: rgba(100, 200, 255, 0.3);
+      border-color: rgba(100, 200, 255, 0.8);
+      color: #fff;
+    }
+    button.btn-warn {
+      background: rgba(255, 120, 120, 0.15);
+      border-color: rgba(255, 120, 120, 0.35);
+      color: #ff9999;
+    }
+    button.btn-warn:hover {
+      background: rgba(255, 120, 120, 0.3);
+      border-color: rgba(255, 120, 120, 0.7);
+    }
+
+    /* Main Workspace Layout */
+    #main-layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Left Sidebar: Chord Engine */
+    #chord-sidebar {
+      width: 250px;
+      background: rgba(11, 11, 24, 0.96);
+      border-right: 1px solid rgba(100, 200, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 12px;
+      gap: 12px;
+      z-index: 5;
+    }
+
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: rgba(100, 200, 255, 0.8);
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(100, 200, 255, 0.12);
+      padding-bottom: 4px;
+      margin-top: 4px;
+    }
+
+    .sidebar-desc {
+      font-size: 10px;
+      color: rgba(200, 200, 255, 0.45);
+      line-height: 1.4;
+    }
+
+    .chord-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .chord-option-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .chord-option-row label {
+      font-size: 10px;
+      color: rgba(200, 200, 255, 0.55);
+      text-transform: uppercase;
+    }
+
+    .chord-option-row select {
+      background: rgba(22, 22, 45, 0.9);
+      color: #d0d0ff;
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      padding: 4px 6px;
+      font-size: 11px;
+      font-family: inherit;
+      border-radius: 3px;
+    }
+
+    .chord-btn-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .chord-btn {
+      text-align: left;
+      padding: 7px 10px;
+      font-size: 11px;
+      background: rgba(25, 25, 55, 0.6);
+      border: 1px solid rgba(100, 200, 255, 0.2);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: all 0.12s ease;
+    }
+
+    .chord-btn:hover {
+      background: rgba(100, 200, 255, 0.18);
+      border-color: rgba(100, 200, 255, 0.5);
+      transform: translateX(2px);
+    }
+
+    .chord-btn-title {
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .chord-btn-desc {
+      font-size: 9px;
+      color: rgba(200, 200, 255, 0.5);
+    }
+
+    .chord-section-header {
+      font-size: 10px;
+      font-weight: 600;
+      color: #9fe0ff;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 6px 0 3px 0;
+      margin-top: 6px;
+      border-bottom: 1px dashed rgba(100, 200, 255, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .voice-leading-btn {
+      width: 100%;
+      font-size: 10px;
+      padding: 5px 8px;
+      background: rgba(30, 60, 95, 0.6);
+      border: 1px solid rgba(100, 200, 255, 0.4);
+      border-radius: 4px;
+      color: #c0e8ff;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .voice-leading-btn:hover {
+      border-color: rgba(100, 200, 255, 0.8);
+      background: rgba(45, 80, 130, 0.7);
+    }
+
+    .voice-leading-btn.enabled {
+      background: rgba(25, 90, 75, 0.65);
+      border-color: rgba(70, 230, 160, 0.6);
+      color: #72ffcf;
+    }
+
+    .chord-notes-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 4px;
+    }
+
+    .note-chip {
+      background: rgba(35, 40, 75, 0.75);
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      border-radius: 3px;
+      padding: 2px 5px;
+      font-size: 9px;
+      color: #d8e5ff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      transition: all 0.1s ease;
+      user-select: none;
+    }
+
+    .note-chip:hover {
+      background: rgba(80, 140, 255, 0.4);
+      border-color: rgba(120, 220, 255, 0.8);
+      color: #ffffff;
+      transform: scale(1.04);
+    }
+
+    .note-chip.koron-chip {
+      border-color: rgba(255, 170, 70, 0.5);
+      background: rgba(65, 45, 30, 0.65);
+      color: #ffd8a8;
+    }
+
+    .chip-freq {
+      color: rgba(180, 210, 255, 0.6);
+      font-size: 8px;
+    }
+
+    .chip-piano {
+      color: rgba(140, 255, 180, 0.75);
+      font-size: 7.5px;
+      margin-left: 2px;
+    }
+
+    .hotkey-badge {
+      display: inline-block;
+      border: 1px solid rgba(100, 200, 255, 0.4);
+      background: rgba(30, 30, 65, 0.85);
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 9.5px;
+      padding: 1px 4px;
+      color: #9fe0ff;
+      margin-right: 4px;
+    }
+
+    /* MIDI Interface Styling */
+    .midi-panel-box {
+      background: rgba(18, 18, 38, 0.75);
+      border: 1px solid rgba(100, 200, 255, 0.2);
+      border-radius: 4px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .midi-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .midi-row label, .midi-sub-col label {
+      font-size: 9px;
+      color: rgba(200, 200, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .midi-row select, .midi-sub-col select {
+      background: rgba(22, 22, 45, 0.9);
+      color: #d0d0ff;
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      padding: 3px 5px;
+      font-size: 10px;
+      font-family: inherit;
+      border-radius: 3px;
+    }
+
+    .midi-row-split {
+      display: flex;
+      gap: 6px;
+    }
+
+    .midi-sub-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .midi-led {
+      padding: 1px 4px;
+      border-radius: 2px;
+      background: rgba(30, 30, 60, 0.8);
+      color: rgba(200, 200, 255, 0.35);
+      border: 1px solid rgba(100, 200, 255, 0.15);
+      font-size: 8px;
+      font-weight: bold;
+      transition: all 0.08s ease;
+    }
+
+    .midi-led.active-in {
+      background: #00ffaa;
+      color: #032010;
+      border-color: #00ffaa;
+      box-shadow: 0 0 6px #00ffaa;
+    }
+
+    .midi-led.active-out {
+      background: #ffaa00;
+      color: #251000;
+      border-color: #ffaa00;
+      box-shadow: 0 0 6px #ffaa00;
+    }
+
+    /* Instrument Range & SWAM Mapping Styling */
+    .range-panel-box {
+      background: rgba(18, 20, 42, 0.85);
+      border: 1px solid rgba(255, 175, 50, 0.3);
+      border-radius: 4px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .range-toggle-btn {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: rgba(30, 45, 65, 0.85);
+      border: 1px solid rgba(100, 200, 255, 0.3);
+      color: #9fe0ff;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .range-toggle-btn.enabled {
+      background: rgba(220, 140, 20, 0.3);
+      border-color: rgba(255, 175, 40, 0.8);
+      color: #ffd880;
+      box-shadow: 0 0 6px rgba(255, 175, 40, 0.25);
+    }
+
+    .range-metrics-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9px;
+      color: rgba(200, 220, 255, 0.7);
+      padding: 3px 0 1px 0;
+      border-top: 1px dashed rgba(255, 175, 50, 0.2);
+    }
+
+    .badge-ok {
+      background: rgba(40, 180, 120, 0.2);
+      border: 1px solid rgba(40, 220, 140, 0.5);
+      color: #72ffcf;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 8.5px;
+      font-weight: 600;
+    }
+
+    #range-keyboard-container {
+      width: 100%;
+      height: 42px;
+      background: #080812;
+      border: 1px solid rgba(255, 175, 50, 0.25);
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      margin-top: 3px;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+    }
+
+    .swam-kb-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      position: relative;
+    }
+
+    .swam-white-key {
+      flex: 1;
+      height: 100%;
+      background: #e4e7f0;
+      border-right: 1px solid #7c8299;
+      position: relative;
+      box-sizing: border-box;
+      transition: background 0.08s ease;
+      cursor: pointer;
+    }
+
+    .swam-white-key.dimmed {
+      background: #1b1c2b !important;
+      border-right-color: #12131d;
+      opacity: 0.35;
+    }
+
+    .swam-white-key.in-range {
+      background: #ebf0fc;
+    }
+
+    .swam-white-key.active-hit {
+      background: #ffaa11 !important;
+      box-shadow: 0 0 10px #ffaa11;
+    }
+
+    .swam-black-key {
+      position: absolute;
+      top: 0;
+      left: 60%;
+      width: 75%;
+      height: 60%;
+      background: #141724;
+      border: 1px solid #080810;
+      border-radius: 0 0 2px 2px;
+      z-index: 5;
+      box-sizing: border-box;
+      transition: background 0.08s ease;
+      cursor: pointer;
+    }
+
+    .swam-black-key.dimmed {
+      background: #0c0d16 !important;
+      border-color: #07070d;
+      opacity: 0.3;
+    }
+
+    .swam-black-key.in-range {
+      background: #1a1e30;
+      border-color: #10121d;
+    }
+
+    .swam-black-key.active-hit {
+      background: #ffcc22 !important;
+      box-shadow: 0 0 10px #ffcc22;
+    }
+
+    .swam-key-label {
+      position: absolute;
+      bottom: 1px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 7px;
+      color: #333a55;
+      font-weight: bold;
+      pointer-events: none;
+    }
+
+    .swam-white-key.dimmed .swam-key-label {
+      color: #4a4d65;
+    }
+
+    /* Circle of Fifths Interactive Dial */
+    #circle-fifths-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: rgba(18, 18, 38, 0.7);
+      border: 1px solid rgba(100, 200, 255, 0.18);
+      border-radius: 4px;
+      padding: 8px 4px;
+    }
+
+    .circle-nav-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 4px;
+    }
+
+    #circle-svg {
+      width: 150px;
+      height: 150px;
+    }
+
+    .circle-node {
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    /* Outer Ring: Major Keys */
+    .circle-node.node-major circle {
+      fill: rgba(20, 22, 48, 0.92);
+      stroke: rgba(100, 200, 255, 0.4);
+      stroke-width: 1.5;
+      transition: all 0.15s ease;
+    }
+
+    .circle-node.node-major text {
+      fill: rgba(200, 230, 255, 0.85);
+      font-size: 8px;
+      font-family: inherit;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    .circle-node.node-major:hover circle {
+      stroke: #64c8ff;
+      fill: rgba(45, 55, 110, 0.95);
+    }
+
+    .circle-node.node-major.active-key circle {
+      fill: rgba(100, 200, 255, 0.9);
+      stroke: #ffffff;
+      stroke-width: 2.2;
+      filter: drop-shadow(0 0 6px rgba(100, 200, 255, 0.85));
+    }
+
+    .circle-node.node-major.active-key text {
+      fill: #0a0a16;
+      font-weight: bold;
+    }
+
+    /* Inner Ring: Relative Minor Keys */
+    .circle-node.node-minor circle {
+      fill: rgba(35, 18, 48, 0.92);
+      stroke: rgba(215, 130, 255, 0.4);
+      stroke-width: 1.5;
+      transition: all 0.15s ease;
+    }
+
+    .circle-node.node-minor text {
+      fill: rgba(240, 195, 255, 0.85);
+      font-size: 6.8px;
+      font-family: inherit;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-weight: 500;
+      pointer-events: none;
+    }
+
+    .circle-node.node-minor:hover circle {
+      stroke: #d880ff;
+      fill: rgba(75, 30, 105, 0.95);
+    }
+
+    .circle-node.node-minor.active-key circle {
+      fill: rgba(215, 120, 255, 0.9);
+      stroke: #ffffff;
+      stroke-width: 2.2;
+      filter: drop-shadow(0 0 6px rgba(220, 110, 255, 0.85));
+    }
+
+    .circle-node.node-minor.active-key text {
+      fill: #0e0716;
+      font-weight: bold;
+    }
+
+    .octave-btn-row {
+      display: flex;
+      gap: 4px;
+      width: 100%;
+    }
+
+    .octave-btn-row button {
+      flex: 1;
+      padding: 5px 4px;
+      font-size: 10px;
+    }
+
+    .keyboard-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 9px;
+      color: rgba(200, 200, 255, 0.55);
+      background: rgba(15, 15, 32, 0.6);
+      padding: 6px;
+      border-radius: 3px;
+      border: 1px solid rgba(100, 200, 255, 0.1);
+    }
+
+    .legend-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Active Notes Monitor in Sidebar */
+    #note-monitor-box {
+      background: rgba(18, 18, 38, 0.85);
+      border: 1px solid rgba(100, 200, 255, 0.2);
+      border-radius: 4px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 80px;
+    }
+
+    #active-notes-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+
+    .note-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(100, 200, 255, 0.18);
+      border: 1px solid rgba(100, 200, 255, 0.35);
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 10px;
+      color: #ffffff;
+      animation: noteFadeIn 0.15s ease-out;
+    }
+
+    .note-badge .note-freq {
+      font-size: 8.5px;
+      color: rgba(200, 200, 255, 0.6);
+    }
+
+    @keyframes noteFadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    #canvas-container {
+      flex: 1;
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    #info-bar {
+      display: flex;
+      gap: 20px;
+      padding: 6px 18px;
+      background: rgba(10, 10, 20, 0.95);
+      border-top: 1px solid rgba(100, 200, 255, 0.12);
+      font-size: 11px;
+      color: rgba(200, 200, 255, 0.45);
+      flex-wrap: wrap;
+    }
+
+    #info-bar span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #info-bar .value {
+      color: rgba(100, 200, 255, 0.85);
+    }
+
+    /* Start overlay */
+    #start-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.96);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.4s;
+    }
+    #start-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #start-overlay h2 {
+      font-size: 26px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      color: rgba(100, 200, 255, 0.95);
+      margin-bottom: 12px;
+    }
+    #start-overlay p {
+      font-size: 13px;
+      color: rgba(200, 200, 255, 0.6);
+      margin-bottom: 26px;
+      max-width: 500px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    #start-btn {
+      font-size: 14px;
+      padding: 11px 36px;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Start overlay (Web Audio requires user gesture) -->
+  <div id="start-overlay">
+    <h2>⬠ PENTAGON SEQUENCER</h2>
+    <p>
+      An acoustic-geometric generative sequencer. Nested irregular cyclic pentagons
+      tuned to Just Intonation. Strum strings with your mouse, trigger geometric chords,
+      scale up to 12 concentric rings, or let the bouncing particle play generatively!
+    </p>
+    <button id="start-btn">▶ BEGIN</button>
+  </div>
+
+  <header>
+    <h1>⬠ PENTAGON SEQUENCER</h1>
+    <div class="controls">
+      <div class="control-group">
+        <label>Root</label>
+        <select id="root-select">
+          <option value="C">C</option>
+          <option value="Cs">C#</option>
+          <option value="D">D</option>
+          <option value="Ds">D#</option>
+          <option value="E">E</option>
+          <option value="F">F</option>
+          <option value="Fs">F#</option>
+          <option value="G">G</option>
+          <option value="Gs">G#</option>
+          <option value="A" selected>A (440)</option>
+          <option value="As">A#</option>
+          <option value="B">B</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Scale</label>
+        <select id="scale-select">
+          <optgroup label="دستگاه‌های ایرانی (Persian Dastgahs)">
+            <option value="shur">شور (Dastgah Shur)</option>
+            <option value="chahargah">چهارگاه (Dastgah Chahargah)</option>
+            <option value="homayoun">همایون (Dastgah Homayoun)</option>
+            <option value="segah">سه‌گاه (Dastgah Segah)</option>
+            <option value="mahur">ماهور (Dastgah Mahur)</option>
+            <option value="esfahan">اصفهان (Avaz Esfahan)</option>
+            <option value="nava">نوا (Dastgah Nava)</option>
+            <option value="rastPanjgah">راست‌پنجگاه (Dastgah Rast-Panjgah)</option>
+          </optgroup>
+          <optgroup label="مقام‌های ترکی و شرقی (Turkish Makams)">
+            <option value="bayati">بیاتی (Makam Bayati)</option>
+            <option value="hijaz">حجاز (Makam Hijaz)</option>
+            <option value="rast">راست (Makam Rast)</option>
+            <option value="nihavend">نهاوند (Makam Nihavend)</option>
+            <option value="saba">صبا (Makam Saba)</option>
+            <option value="kurdi">کردی (Makam Kurdi)</option>
+            <option value="ushak">عشاق (Makam Ushak)</option>
+          </optgroup>
+          <optgroup label="گام‌ها و مدهای کلیسایی (Western & Church Modes)">
+            <option value="majorIonian">ماژور (Major / Ionian)</option>
+            <option value="naturalMinor">مینور طبیعی (Natural Minor / Aeolian)</option>
+            <option value="harmonicMinor">مینور هارمونیک (Harmonic Minor)</option>
+            <option value="melodicMinor">مینور ملودیک (Melodic Minor)</option>
+            <option value="dorian">دوریان (Dorian)</option>
+            <option value="mixolydian">میکسولیدین (Mixolydian)</option>
+            <option value="lydian">لیدین (Lydian)</option>
+            <option value="phrygian">فریژین (Phrygian)</option>
+            <option value="locrian">لوکرین (Locrian)</option>
+          </optgroup>
+          <optgroup label="پنتاتونیک و جهانی (Pentatonic & World)">
+            <option value="majorPentatonic" selected>Major Pentatonic</option>
+            <option value="minorPentatonic">Minor Pentatonic</option>
+            <option value="japanese">Japanese (In)</option>
+            <option value="hirajoshi">Hirajoshi</option>
+            <option value="egyptian">Egyptian (Sus)</option>
+            <option value="pelog">Pelog (Balinese)</option>
+            <option value="chinesePentatonic">Chinese (Gong)</option>
+            <option value="bluesPentatonic">Blues Minor</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Instrument</label>
+        <select id="timbre-select">
+          <option value="accordion" selected>🪗 آکاردئون آکوستیک (Acoustic Accordion)</option>
+          <option value="swamCello">🎻 ویولنسل آرشه‌ای (SWAM Cello)</option>
+          <option value="santur">🪕 سنتور و قانون (Santur & Kanun)</option>
+          <option value="celestialHarp">چنگ آسمانی (Celestial Harp)</option>
+          <option value="silkLute">تار و تنبور (Silk Lute)</option>
+          <option value="ambientBell">پیانو بلورین (Glass Bell)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Reverb</label>
+        <input type="range" id="reverb-slider" min="0" max="0.9" step="0.05" value="0.38" title="Acoustic Chamber Reverb" />
+      </div>
+      <div class="control-group">
+        <label>Sustain</label>
+        <input type="range" id="decay-slider" min="0.5" max="3.5" step="0.1" value="1.8" title="String Ring-out Duration" />
+      </div>
+      <div class="control-group">
+        <label>Levels</label>
+        <select id="levels">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+          <option value="12" selected>12 Rings</option>
+          <option value="16">16 Rings</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Interval (k)</label>
+        <select id="scaling">
+          <option value="-1" selected>Auto-Fit (Harmonic Linear f∝1/L)</option>
+          <option value="0.92">Micro-Step (k=0.92)</option>
+          <option value="0.8889">Major 2nd (k=8/9)</option>
+          <option value="0.8333">Minor 3rd (k=5/6)</option>
+          <option value="0.80">Major 3rd (k=4/5)</option>
+          <option value="0.75">Fourth (k=3/4)</option>
+          <option value="0.6667">Fifth (k=2/3)</option>
+          <option value="0.5">Octave (k=0.5)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Vol</label>
+        <input type="range" id="volume" min="0" max="1" step="0.05" value="0.7" />
+      </div>
+      <button id="ball-toggle-btn">⚽ BALL: ON</button>
+      <button id="reset-btn">RESET</button>
+      <button id="pause-btn">PAUSE</button>
+    </div>
+  </header>
+
+  <div id="main-layout">
+    <!-- Left Sidebar: Chord Engine, MIDI & Harmonics Tool -->
+    <aside id="chord-sidebar">
+      <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>MIDI INTERFACE (اتصال میدی)</span>
+        <span style="display: inline-flex; gap: 4px;">
+          <span id="midi-led-in" class="midi-led" title="MIDI IN Data">IN</span>
+          <span id="midi-led-out" class="midi-led" title="MIDI OUT Data">OUT</span>
+        </span>
+      </div>
+      <div class="sidebar-desc">
+        Connect hardware MIDI keyboards, synths, or DAWs (Ableton, FL, Reaper).
+      </div>
+
+      <div class="midi-panel-box">
+        <div class="midi-row">
+          <label>MIDI IN (ورودی کیبورد)</label>
+          <select id="midi-in-select">
+            <option value="all" selected>All Available Inputs</option>
+            <option value="none">Disabled</option>
+          </select>
+        </div>
+
+        <div class="midi-row">
+          <label>MIDI Mode (حالت میدی)</label>
+          <select id="midi-mode-select">
+            <option value="mpe" selected>✨ MPE Polyphonic (کوک مستقل هر نت برای Ableton / VST)</option>
+            <option value="standard">Standard MIDI 1.0 (تک‌کاناله استاندارد)</option>
+          </select>
+        </div>
+
+        <div class="midi-row">
+          <label>MIDI OUT (خروجی ساز/سینت)</label>
+          <select id="midi-out-select">
+            <option value="none" selected>Disabled (Local Audio Only)</option>
+          </select>
+        </div>
+
+        <div class="midi-row-split">
+          <div class="midi-sub-col">
+            <label>Channel</label>
+            <select id="midi-channel-select">
+              <option value="1" selected>Ch 1</option>
+              <option value="2">Ch 2</option>
+              <option value="3">Ch 3</option>
+              <option value="4">Ch 4</option>
+              <option value="5">Ch 5</option>
+              <option value="10">Ch 10</option>
+              <option value="16">Ch 16</option>
+            </select>
+          </div>
+          <div class="midi-sub-col">
+            <label>Micro-Pitch</label>
+            <select id="midi-pitchbend-select">
+              <option value="true" selected>Pitch Bend ON (Koron)</option>
+              <option value="false">Standard 12-TET</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 4px; margin-top: 3px;">
+          <button id="midi-panic-btn" title="Send All Notes Off / Panic" style="flex: 1; font-size: 9.5px; padding: 3px 6px;">PANIC (خاموشی تمام نتها)</button>
+        </div>
+      </div>
+
+      <!-- Dedicated Target Instrument Range & SWAM Mapping Section -->
+      <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>INSTRUMENT RANGE (محدوده ساز)</span>
+        <button id="range-toggle-btn" class="range-toggle-btn enabled" title="Toggle Target Instrument Range Constraint">
+          RANGE: ON
+        </button>
+      </div>
+      <div class="sidebar-desc">
+        Constrain and map geometric strings strictly to your target VST / instrument (e.g. SWAM Cello C2–G5).
+      </div>
+
+      <div class="range-panel-box">
+        <div class="midi-row">
+          <label>Target Instrument Preset (ساز هدف)</label>
+          <select id="range-preset-select">
+            <option value="swam-cello" selected>🎻 ویولنسل (SWAM Cello: C2 – G5)</option>
+            <option value="violin">🎻 ویولن (Violin: G3 – E7)</option>
+            <option value="viola">🎻 ویولا / آلتو (Viola: C3 – A6)</option>
+            <option value="contrabass">🎻 کنترباس (Double Bass: C1 – G3)</option>
+            <option value="persian-tar">🪕 تار ایرانی (Tar: C3 – C6)</option>
+            <option value="persian-setar">🪕 سه‌تار (Setar: C3 – F5)</option>
+            <option value="santur">🪕 سنتور ۹ پل (Santur: E3 – F6)</option>
+            <option value="kamancheh">🎻 کمانچه (Kamancheh: D3 – D6)</option>
+            <option value="persian-ney">🪈 نی هفت‌بند (Ney: D4 – D7)</option>
+            <option value="guitar">🎸 گیتار کلاسیک (Guitar: E2 – B5)</option>
+            <option value="piano-88">🎹 پیانو گرند ۸۸ کلاویه (A0 – C8)</option>
+            <option value="custom">⚙️ سفارشی (Custom Range...)</option>
+          </select>
+        </div>
+
+        <div class="midi-row-split">
+          <div class="midi-sub-col">
+            <label>Min (پایین‌ترین نت)</label>
+            <select id="range-min-select"></select>
+          </div>
+          <div class="midi-sub-col">
+            <label>Max (بالاترین نت)</label>
+            <select id="range-max-select"></select>
+          </div>
+        </div>
+
+        <div class="midi-row">
+          <label>Out-of-Range Mode (رفتار خارج از محدوده)</label>
+          <select id="range-behavior-select">
+            <option value="fold" selected>Smart Octave Fold (انتقال خودکار اکتاوی به محدوده)</option>
+            <option value="auto-fit">Auto-Fit Rings (توزیع هندسی تمام حلقه‌ها در محدوده)</option>
+            <option value="mute">Strict Mute (قطع و مسدودسازی نتهای خارج از محدوده)</option>
+          </select>
+        </div>
+
+        <div class="range-metrics-row">
+          <span id="range-span-info">C2 (65.4Hz) – G5 (784Hz)</span>
+          <span id="range-status-badge" class="badge-ok">SWAM Cello Ready</span>
+        </div>
+
+        <!-- SWAM-Style Visual Virtual Keyboard Strip -->
+        <div id="range-keyboard-container"></div>
+      </div>
+
+      <div class="sidebar-section-title">CIRCLE OF 5THS (دایره پنجم)</div>
+      <div class="sidebar-desc">
+        Modulate key along Perfect Fifths (3/2, +7 semitones) or Fourths (+5 semitones).
+      </div>
+
+      <div id="circle-fifths-box">
+        <div class="circle-nav-row">
+          <button id="fifth-prev-btn" title="Step Counter-Clockwise (Fourth)">[ [ ] ◀ 4th</button>
+          <button id="circle-mode-toggle-btn" title="Toggle Major / Relative Minor (Key: M)" style="font-size: 10px; padding: 3px 6px;">[ M ] Maj ⇄ Min</button>
+          <button id="fifth-next-btn" title="Step Clockwise (Fifth)">5th ▶ [ ] ]</button>
+        </div>
+        <div style="font-size: 11px; font-weight: bold; text-align: center; margin-top: 2px;">
+          <span id="circle-active-key-text" style="color: #64c8ff;">A (440Hz)</span>
+          <span id="circle-active-mode-badge" style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(100, 200, 255, 0.2); color: #9be0ff; margin-left: 4px;">Major</span>
+        </div>
+        <!-- 2-Ring Concentric Circle of Fifths: Outer = Major, Inner = Relative Minor -->
+        <svg id="circle-svg" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="56" fill="none" stroke="rgba(100, 200, 255, 0.22)" stroke-width="1.2" stroke-dasharray="2,3" />
+          <circle cx="75" cy="75" r="34" fill="none" stroke="rgba(215, 130, 255, 0.22)" stroke-width="1.2" stroke-dasharray="2,3" />
+          <g id="circle-connectors-group"></g>
+          <g id="circle-nodes-group"></g>
+        </svg>
+      </div>
+
+      <div class="sidebar-section-title">OCTAVE CONTROL (کنترل اکتاو)</div>
+      <div class="sidebar-desc">Shift base acoustic register or double in octaves.</div>
+      <div class="octave-btn-row">
+        <button id="octave-down-btn" title="Shift Base Octave Down">[ Z ] Oct -</button>
+        <button id="octave-up-btn" title="Shift Base Octave Up">[ X ] Oct +</button>
+        <button id="octave-cascade-btn" title="Trigger Radial Octave Cascade">[ O ] Cascade</button>
+      </div>
+
+      <div class="sidebar-section-title">KEYBOARD CHORD VOICINGS</div>
+      <div class="chord-options">
+        <div class="chord-option-row">
+          <label>Strum Style</label>
+          <select id="strum-style-select">
+            <option value="fast-strum" selected>Fast Strum (25ms)</option>
+            <option value="slow-strum">Slow Harp Roll (55ms)</option>
+            <option value="block">Simultaneous (Block)</option>
+            <option value="down-strum">Down Strum (Reverse)</option>
+            <option value="cascade">Ambient Cascade (80ms)</option>
+          </select>
+        </div>
+
+        <div class="chord-option-row">
+          <label>Target Ring</label>
+          <select id="chord-ring-select">
+            <option value="all" selected>All / Auto-Voicing</option>
+            <option value="0">Ring 0 (Outermost / Bass)</option>
+            <option value="1">Ring 1 (Low-Mid)</option>
+            <option value="2">Ring 2 (Center / Mid)</option>
+            <option value="3">Ring 3 (High)</option>
+          </select>
+        </div>
+
+        <div style="margin-top: 4px;">
+          <button id="voice-leading-toggle-btn" class="voice-leading-btn enabled" title="Toggle Smooth Voice-Leading (حل شدن گوش‌نواز آکوردها در یکدیگر)">
+            <span>VOICE LEADING (هدایت اصوات)</span>
+            <span id="voice-leading-status">SMOOTH: ON</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="chord-btn-grid" id="chord-buttons-container">
+        <!-- Injected via JavaScript from CHORD_PRESETS -->
+      </div>
+
+      <div class="sidebar-section-title">KEYBOARD CHEAT-SHEET (نواختن آکاردئونی)</div>
+      <div class="keyboard-legend">
+        <div class="legend-row"><span>Accordion Chords (دست چپ)</span><span class="hotkey-badge">A S D F G H J</span></div>
+        <div class="legend-row"><span>Melody Strings (دست راست)</span><span class="hotkey-badge">1 2 3 4 5 6 7</span></div>
+        <div class="legend-row"><span>Geometric Chords</span><span class="hotkey-badge">Q W E R T Y U I</span></div>
+        <div class="legend-row"><span>Octave Cascade</span><span class="hotkey-badge">O</span></div>
+        <div class="legend-row"><span>Shift Octave</span><span class="hotkey-badge">Z (Down) / X (Up)</span></div>
+        <div class="legend-row"><span>Circle of 5ths</span><span class="hotkey-badge">[ (4th) / ] (5th)</span></div>
+        <div class="legend-row"><span>Major ⇄ Minor</span><span class="hotkey-badge">M</span></div>
+        <div class="legend-row"><span>Select Ring</span><span class="hotkey-badge">Shift + 1-9</span></div>
+        <div class="legend-row"><span>Strum All Rings</span><span class="hotkey-badge">Space</span></div>
+      </div>
+
+      <div class="sidebar-section-title">ACTIVE NOTES (نتهای اجرا شده)</div>
+      <div id="note-monitor-box">
+        <div id="active-notes-list">
+          <span style="font-size: 10px; color: rgba(200, 200, 255, 0.4);">Ready — press keys, click strings or chords</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Canvas Simulation Area -->
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+    </div>
+  </div>
+
+  <div id="info-bar">
+    <span>Voices: <span class="value" id="hud-voices">0</span></span>
+    <span>Ball: <span class="value" id="hud-ball">Active</span></span>
+    <span>Sim Time: <span class="value" id="hud-time">0.00</span>s</span>
+    <span>Bounces: <span class="value" id="hud-bounces">0</span></span>
+    <span>Last Played: <span class="value" id="hud-note">—</span></span>
+    <span>FPS: <span class="value" id="hud-fps">0</span></span>
+  </div>
+
+  <script type="module" src="/src/app.ts"></script>
+</body>
+</html>
