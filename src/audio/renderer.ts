@@ -1,20 +1,23 @@
 import type { CollisionEvent, NoteEvent, Edge } from '../types';
 import { collisionToNote } from './note-mapper';
-import { VoiceAllocator } from './voice-allocator';
+import { VoiceAllocator, type PlayableVoice } from './voice-allocator';
 import { ReverbEffect } from './reverb';
-import type { FMVoice } from './fm-synth';
+import { BowedStringVoice } from './physical-bow-string';
+import { DroneSynthesizer, DASTGAH_PRESETS, type DastgahScale } from './dastgah-engine';
 
 /**
  * Top-level audio renderer: receives CollisionEvents, converts to NoteEvents,
  * and routes them through the physical voice allocator, wooden soundboard EQ,
- * and lush stereo acoustic convolution reverb.
+ * continuous modal drone synthesizer, and lush stereo acoustic convolution reverb.
  */
 export class AudioRenderer {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private reverb: ReverbEffect | null = null;
   private allocator: VoiceAllocator | null = null;
-  private activeKeyVoices = new Map<string, FMVoice[]>();
+  private drone: DroneSynthesizer | null = null;
+  private activeKeyVoices = new Map<string, PlayableVoice[]>();
+  private activeBowingVoice: BowedStringVoice | null = null;
   private _initialized = false;
 
   get initialized(): boolean {
@@ -29,7 +32,7 @@ export class AudioRenderer {
     minIOI = 20,
     noteDuration = 1.8,
     reverbMix = 0.38,
-    presetKey = 'santur',
+    presetKey = 'swamCello',
   ): Promise<void> {
     if (this._initialized) return;
 
@@ -63,6 +66,9 @@ export class AudioRenderer {
       presetKey,
     );
 
+    // Modal drone generator connected to master reverb
+    this.drone = new DroneSynthesizer(this.ctx, this.reverb.input);
+
     this._initialized = true;
   }
 
@@ -88,13 +94,6 @@ export class AudioRenderer {
 
   /**
    * Manually pluck/play a note on a specific edge.
-   *
-   * @param edge - Target polygon edge
-   * @param pentagonLevel - Level of the concentric ring
-   * @param param - Strike position along the edge [0, 1]
-   * @param velocity - MIDI velocity [1, 127]
-   * @param totalEdges - Total edges in this polygon ring
-   * @param scheduledTime - Optional AudioContext time for sample-accurate strumming
    */
   triggerManualNote(
     edge: Edge,
@@ -136,7 +135,6 @@ export class AudioRenderer {
 
   /**
    * Start a sustained note held down by a key or chord button.
-   * Remains sounding until stopKeyNote(keyId) is called.
    */
   startKeyNote(
     keyId: string,
@@ -202,6 +200,85 @@ export class AudioRenderer {
     this.activeKeyVoices.clear();
   }
 
+  // ─── Modal Drone Management ───────────────────────────────────────────────
+
+  /** Start or toggle the modal drone with specific Dastgah */
+  startDrone(scaleId = 'shur', tonicFreq = 146.83): void {
+    const scale = DASTGAH_PRESETS[scaleId] || DASTGAH_PRESETS.shur;
+    this.drone?.start(scale, tonicFreq);
+  }
+
+  /** Stop the modal drone */
+  stopDrone(fadeSec = 0.8): void {
+    this.drone?.stop(fadeSec);
+  }
+
+  /** Modulate the drone to a new Dastgah scale smoothly */
+  modulateDrone(scaleId: string, tonicFreq?: number): void {
+    const scale = DASTGAH_PRESETS[scaleId] || DASTGAH_PRESETS.shur;
+    this.drone?.modulateTo(scale, tonicFreq);
+  }
+
+  /** Check if drone is currently playing */
+  get isDroneActive(): boolean {
+    return this.drone?.active ?? false;
+  }
+
+  /** Set drone volume [0, 1] */
+  setDroneVolume(vol: number): void {
+    this.drone?.setVolume(vol);
+  }
+
+  // ─── Direct Bowing Gesture ────────────────────────────────────────────────
+
+  /**
+   * Direct acoustic bowing of an edge (mouse drag or MPE touch).
+   */
+  startBowing(
+    freqHz: number,
+    bowSpeed = 0.5,
+    bowForce = 0.6,
+    contactPoint = 0.15,
+    pan = 0,
+  ): void {
+    if (!this.ctx || !this.reverb) return;
+    if (this.activeBowingVoice && !this.activeBowingVoice.ended) {
+      this.activeBowingVoice.updateBow(bowSpeed, bowForce, contactPoint);
+      this.activeBowingVoice.setPitch(freqHz);
+      return;
+    }
+
+    this.activeBowingVoice = new BowedStringVoice(
+      this.ctx,
+      this.reverb.input,
+      {
+        frequency: freqHz,
+        bowVelocity: bowSpeed,
+        bowForce,
+        contactPoint,
+        vibratoRate: 5.2,
+        vibratoDepthCents: 25,
+      },
+      9999,
+      pan,
+    );
+  }
+
+  /** Update current bow position, pressure, and speed */
+  updateBowing(bowSpeed: number, bowForce: number, contactPoint?: number): void {
+    this.activeBowingVoice?.updateBow(bowSpeed, bowForce, contactPoint);
+  }
+
+  /** Stop the active bow gesture */
+  stopBowing(releaseSec = 0.12): void {
+    if (this.activeBowingVoice) {
+      this.activeBowingVoice.stop(releaseSec);
+      this.activeBowingVoice = null;
+    }
+  }
+
+  // ─── Global Parameters ───────────────────────────────────────────────────
+
   /** Set reverb wet mix level [0, 1] */
   setReverbMix(mix: number): void {
     this.reverb?.setMix(mix);
@@ -230,12 +307,14 @@ export class AudioRenderer {
 
   /** Get active voice count. */
   get activeVoices(): number {
-    return this.allocator?.activeVoices ?? 0;
+    return (this.allocator?.activeVoices ?? 0) + (this.isDroneActive ? 1 : 0);
   }
 
   /** Stop all audio. */
   stopAll(): void {
     this.allocator?.stopAll();
+    this.stopDrone(0.2);
+    this.stopBowing(0.05);
   }
 
   /** Close the audio context entirely. */

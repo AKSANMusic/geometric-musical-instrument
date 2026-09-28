@@ -376,6 +376,72 @@
       box-shadow: 0 0 6px #ffaa00;
     }
 
+    /* Left Hand Accordion & Modal Drone Performance Console */
+    .accordion-console-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: rgba(18, 20, 40, 0.85);
+      border: 1px solid rgba(255, 175, 40, 0.3);
+      border-radius: 4px;
+      padding: 6px;
+    }
+    .acc-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 9px;
+      background: rgba(30, 35, 65, 0.7);
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.1s ease;
+    }
+    .acc-btn:hover {
+      background: rgba(50, 65, 110, 0.8);
+      border-color: rgba(100, 200, 255, 0.6);
+      transform: translateX(2px);
+    }
+    .acc-btn.active {
+      background: rgba(220, 140, 20, 0.45);
+      border-color: rgba(255, 190, 50, 0.95);
+      box-shadow: 0 0 10px rgba(255, 175, 40, 0.4);
+      transform: scale(1.02);
+    }
+    .acc-btn.koron {
+      border-color: rgba(255, 150, 60, 0.4);
+      background: rgba(50, 35, 25, 0.75);
+    }
+    .acc-btn.koron.active {
+      background: rgba(255, 120, 30, 0.55);
+      border-color: #ff9944;
+      box-shadow: 0 0 10px rgba(255, 120, 30, 0.5);
+    }
+    .acc-key {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+      text-align: center;
+      background: rgba(10, 10, 25, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #ffd880;
+    }
+    .acc-name {
+      font-size: 10px;
+      color: #ffffff;
+      flex: 1;
+      margin-left: 8px;
+    }
+    .acc-int {
+      font-size: 9px;
+      color: rgba(180, 210, 255, 0.7);
+    }
+
     /* Instrument Range & SWAM Mapping Styling */
     .range-panel-box {
       background: rgba(18, 20, 42, 0.85);
@@ -891,6 +957,10 @@
         <label>Vol</label>
         <input type="range" id="volume" min="0" max="1" step="0.05" value="0.7" />
       </div>
+      <div class="control-group">
+        <button id="drone-toggle-btn" style="padding: 4px 8px; font-size: 10.5px; border-color: rgba(255, 175, 40, 0.6); color: #ffd880;" title="Toggle Continuous Modal Drone (واخوان دستگاه)">🎵 DRONE: OFF</button>
+        <input type="range" id="drone-volume" min="0" max="1" step="0.05" value="0.5" style="width: 50px;" title="Modal Drone Volume" />
+      </div>
       <button id="ball-toggle-btn">⚽ BALL: ON</button>
       <button id="reset-btn">RESET</button>
       <button id="pause-btn">PAUSE</button>
@@ -900,7 +970,26 @@
   <div id="main-layout">
     <!-- Left Sidebar: Chord Engine, MIDI & Harmonics Tool -->
     <aside id="chord-sidebar">
-      <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- Left Hand Accordion & Modal Drone Performance Console -->
+      <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center; border-color: rgba(255, 175, 40, 0.4); color: #ffd880;">
+        <span>🪗 کنسول واخوان و آکاردئون (دست چپ)</span>
+        <span style="font-size: 8.5px; color: #ffd880; background: rgba(220, 140, 20, 0.25); border: 1px solid rgba(255, 175, 40, 0.5); padding: 1px 4px; border-radius: 2px;">LIVE DRONES</span>
+      </div>
+      <div class="sidebar-desc">
+        پایه‌ها و هارمونی مودال دستگاهی؛ فشردن هر کلید، ضربه ریتمیک به هندسه می‌زند و صدا را ممتد نگه می‌دارد.
+      </div>
+
+      <div class="accordion-console-grid" id="accordion-console-grid">
+        <div class="acc-btn" data-key="a"><span class="acc-key">A</span><span class="acc-name">پایه (Tonic Drone)</span><span class="acc-int">۱/۱ (D)</span></div>
+        <div class="acc-btn" data-key="s"><span class="acc-key">S</span><span class="acc-name">چهارم درست (Subdom)</span><span class="acc-int">۴/۳ (G)</span></div>
+        <div class="acc-btn" data-key="d"><span class="acc-key">D</span><span class="acc-name">پنجم درست (Dominant)</span><span class="acc-int">۳/۲ (A)</span></div>
+        <div class="acc-btn koron" data-key="f"><span class="acc-key">F</span><span class="acc-name">کرون (Koron 2nd / شاهد)</span><span class="acc-int">۱۲/۱۱ (E-p)</span></div>
+        <div class="acc-btn" data-key="g"><span class="acc-key">G</span><span class="acc-name">سوم خنثی (Neutral 3rd)</span><span class="acc-int">۶/۵ (F)</span></div>
+        <div class="acc-btn koron" data-key="h"><span class="acc-key">H</span><span class="acc-name">ششم کرون (Koron 6th)</span><span class="acc-int">۱۸/۱۱ (B-p)</span></div>
+        <div class="acc-btn" data-key="j"><span class="acc-key">J</span><span class="acc-name">باس بم (Deep Pedal)</span><span class="acc-int">۱/۲ (D2)</span></div>
+      </div>
+
+      <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
         <span>MIDI INTERFACE (اتصال میدی)</span>
         <span style="display: inline-flex; gap: 4px;">
           <span id="midi-led-in" class="midi-led" title="MIDI IN Data">IN</span>

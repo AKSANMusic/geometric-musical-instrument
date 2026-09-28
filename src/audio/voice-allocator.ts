@@ -1,11 +1,22 @@
 import type { NoteEvent } from '../types';
 import { FMVoice, INSTRUMENT_PRESETS, type InstrumentPreset } from './fm-synth';
+import { BowedStringVoice } from './physical-bow-string';
+import { AccordionReedVoice } from './accordion-reed';
+
+export interface PlayableVoice {
+  readonly id: number;
+  readonly startTime: number;
+  ended: boolean;
+  stop(releaseSec?: number): void;
+  release(releaseSec?: number): void;
+  getPriorityScore(now: number): number;
+}
 
 /**
- * Polyphony manager with voice stealing, amplitude ducking, and acoustic preset routing.
+ * Polyphony manager with voice stealing, dynamic ducking, and physical acoustic modeling routing.
  */
 export class VoiceAllocator {
-  private voices: FMVoice[] = [];
+  private voices: PlayableVoice[] = [];
   private nextId = 0;
   private lastOnset = new Map<string, number>(); // "level-edge" → timestamp ms
   private ctx: AudioContext;
@@ -44,9 +55,9 @@ export class VoiceAllocator {
   }
 
   /**
-   * Attempt to play a note. Returns the created FMVoice if triggered, or null if de-bounced.
+   * Attempt to play a note. Returns the created PlayableVoice if triggered, or null if de-bounced.
    */
-  trigger(note: NoteEvent, scheduledTime?: number): FMVoice | null {
+  trigger(note: NoteEvent, scheduledTime?: number): PlayableVoice | null {
     // --- De-bounce ---
     const key = `${note.pentagonLevel}-${note.edgeIndex}`;
     const nowMs = note.timestamp * 1000;
@@ -75,23 +86,56 @@ export class VoiceAllocator {
       );
     }
 
-    // --- Create voice ---
-    const voice = new FMVoice(
-      this.ctx,
-      this.destination,
-      note,
-      this.noteDuration,
-      this.nextId++,
-      gainMul,
-      this.currentPreset,
-      scheduledTime,
-    );
+    let voice: PlayableVoice;
+
+    // --- Route to Physical Model based on preset ---
+    if (this.currentPreset.id === 'swamCello') {
+      voice = new BowedStringVoice(
+        this.ctx,
+        this.destination,
+        {
+          frequency: note.frequency,
+          bowVelocity: note.midiVelocity / 127,
+          bowForce: 0.6 + 0.3 * (1 - note.brightness),
+          contactPoint: 0.05 + 0.25 * note.brightness,
+          gainMultiplier: gainMul,
+        },
+        this.nextId++,
+        note.pan,
+      );
+    } else if (this.currentPreset.id === 'accordion') {
+      voice = new AccordionReedVoice(
+        this.ctx,
+        this.destination,
+        {
+          frequency: note.frequency,
+          bellowsPressure: Math.max(0.2, note.midiVelocity / 127),
+          musetteDetuneCents: 6.5,
+          cassottoTone: note.brightness > 0.45,
+          pan: note.pan,
+          gainMultiplier: gainMul,
+        },
+        this.nextId++,
+      );
+    } else {
+      voice = new FMVoice(
+        this.ctx,
+        this.destination,
+        note,
+        this.noteDuration,
+        this.nextId++,
+        gainMul,
+        this.currentPreset,
+        scheduledTime,
+      );
+    }
+
     this.voices.push(voice);
     return voice;
   }
 
   /** Release a specific voice smoothly (for keyup / note-off) */
-  releaseVoice(voice: FMVoice, releaseSec?: number): void {
+  releaseVoice(voice: PlayableVoice, releaseSec?: number): void {
     voice.release(releaseSec);
   }
 

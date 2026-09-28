@@ -30,15 +30,25 @@ export interface EdgeHit {
   point: Vec2;        // nearest point on the edge
 }
 
+export interface BowTrailPoint {
+  x: number;
+  y: number;
+  time: number;
+  speed: number;
+  force: number;
+}
+
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private flashes: Flash[] = [];
+  private bowTrail: BowTrailPoint[] = [];
   public centerX = 0;
   public centerY = 0;
 
   /** Currently hovered edge (set externally by app.ts) */
   public hoveredEdge: { pentagonLevel: number; edgeIndex: number } | null = null;
+  public showCelloStrings = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -59,7 +69,6 @@ export class CanvasRenderer {
 
   /**
    * Find the nearest edge to a point in canvas coordinates (pixels).
-   * Returns null if no edge is within HOVER_THRESHOLD.
    */
   findNearestEdge(
     canvasX: number,
@@ -67,7 +76,6 @@ export class CanvasRenderer {
     pentagons: ReadonlyArray<Pentagon>,
     threshold = HOVER_THRESHOLD,
   ): EdgeHit | null {
-    // Convert to pentagon coordinate space (origin at center)
     const px = canvasX - this.centerX;
     const py = canvasY - this.centerY;
 
@@ -75,17 +83,14 @@ export class CanvasRenderer {
 
     for (const pent of pentagons) {
       for (const edge of pent.edges) {
-        // Project point onto edge segment
         const ex = edge.p2.x - edge.p1.x;
         const ey = edge.p2.y - edge.p1.y;
         const edgeLenSq = ex * ex + ey * ey;
         if (edgeLenSq < 1e-10) continue;
 
-        // Parameter t: projection of (p - p1) onto edge direction
         let t = ((px - edge.p1.x) * ex + (py - edge.p1.y) * ey) / edgeLenSq;
         t = Math.max(0, Math.min(1, t));
 
-        // Nearest point on edge
         const nearX = edge.p1.x + t * ex;
         const nearY = edge.p1.y + t * ey;
         const dist = Math.hypot(px - nearX, py - nearY);
@@ -115,7 +120,7 @@ export class CanvasRenderer {
     });
   }
 
-  /** Register a manual pluck flash (from click-to-play). */
+  /** Register a manual pluck flash. */
   addManualFlash(point: Vec2, pentagonLevel: number, edgeIndex: number): void {
     this.flashes.push({
       point,
@@ -123,6 +128,21 @@ export class CanvasRenderer {
       pentagonLevel,
       startTime: performance.now(),
     });
+  }
+
+  /** Add point to real-time physical bow gesture trail */
+  addBowTrailPoint(canvasX: number, canvasY: number, speed: number, force = 0.6): void {
+    this.bowTrail.push({
+      x: canvasX - this.centerX,
+      y: canvasY - this.centerY,
+      time: performance.now(),
+      speed,
+      force,
+    });
+  }
+
+  public clearBowTrail(): void {
+    this.bowTrail = [];
   }
 
   private lastTotalLevels = 3;
@@ -145,6 +165,11 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(this.centerX, this.centerY);
 
+    // Draw Cello Acoustic Resonance Guidelines if enabled
+    if (this.showCelloStrings) {
+      this.drawCelloGuidelines(pentagons);
+    }
+
     // Draw pentagons
     for (const pent of pentagons) {
       this.drawPentagon(pent);
@@ -157,6 +182,9 @@ export class CanvasRenderer {
       this.drawFlash(flash, now);
     }
 
+    // Draw physical bow gesture trail
+    this.drawBowTrail(now);
+
     // Draw particles
     for (const particle of particles) {
       this.drawParticle(particle);
@@ -166,6 +194,66 @@ export class CanvasRenderer {
 
     // HUD
     this.drawHUD(activeVoices, w);
+  }
+
+  private drawCelloGuidelines(pentagons: ReadonlyArray<Pentagon>): void {
+    if (pentagons.length === 0) return;
+    const { ctx } = this;
+    const outerR = pentagons[0].circumradius;
+
+    // 4 Cello Strings: C2 (65Hz), G2 (98Hz), D3 (146Hz), A3 (220Hz)
+    const strings = [
+      { name: 'C₂ (سیم بم)', color: 'rgba(255, 120, 60, 0.22)', angle: -Math.PI * 0.75 },
+      { name: 'G₂ (سل)', color: 'rgba(255, 180, 50, 0.22)', angle: -Math.PI * 0.25 },
+      { name: 'D₃ (رِ)', color: 'rgba(70, 200, 255, 0.22)', angle: Math.PI * 0.25 },
+      { name: 'A₃ (لا)', color: 'rgba(180, 130, 255, 0.22)', angle: Math.PI * 0.75 },
+    ];
+
+    for (const str of strings) {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      const ex = Math.cos(str.angle) * (outerR + 25);
+      const ey = Math.sin(str.angle) * (outerR + 25);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = str.color;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = str.color.replace('0.22', '0.6');
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(str.name, ex * 1.06, ey * 1.06);
+    }
+  }
+
+  private drawBowTrail(now: number): void {
+    const maxAge = 350; // ms trail persistence
+    this.bowTrail = this.bowTrail.filter(p => now - p.time < maxAge);
+    if (this.bowTrail.length < 2) return;
+
+    const { ctx } = this;
+    ctx.save();
+    for (let i = 1; i < this.bowTrail.length; i++) {
+      const p1 = this.bowTrail[i - 1];
+      const p2 = this.bowTrail[i];
+      const age = now - p2.time;
+      const alpha = (1 - age / maxAge) * 0.85;
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      // Rosin stick-slip bow trail color: Warm gold when digging deep, cyan when fast
+      const r = Math.round(100 + 155 * p2.force);
+      const g = Math.round(200 + 55 * p2.speed);
+      const b = 255;
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      ctx.lineWidth = Math.max(2, p2.force * 6);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawPentagon(pent: Pentagon): void {
@@ -178,7 +266,6 @@ export class CanvasRenderer {
         this.hoveredEdge?.pentagonLevel === pent.level &&
         this.hoveredEdge?.edgeIndex === edge.index;
 
-      // Glow behind hovered edge
       if (isHovered) {
         ctx.save();
         ctx.beginPath();

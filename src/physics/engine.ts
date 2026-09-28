@@ -121,4 +121,79 @@ export class PhysicsEngine {
     this.particles = [];
     this.time = 0;
   }
+
+  /**
+   * Launch a targeted physical impulse toward a specific polygon edge.
+   * Connects musical keystrokes/chords directly to geometric acoustic excitation.
+   */
+  launchTargetedImpulse(
+    level: number,
+    edgeIndex: number,
+    speed = 450,
+    contactParam = 0.5,
+  ): ParticleState | null {
+    const pent = this.pentagons.find(p => p.level === level) ?? this.pentagons[0];
+    if (!pent || !pent.edges[edgeIndex]) return null;
+
+    const edge = pent.edges[edgeIndex];
+    // Target position along the edge
+    const targetX = edge.p1.x + contactParam * (edge.p2.x - edge.p1.x);
+    const targetY = edge.p1.y + contactParam * (edge.p2.y - edge.p1.y);
+
+    // Launch from near center toward the target edge
+    const originDist = 20;
+    const dx = targetX;
+    const dy = targetY;
+    const len = Math.hypot(dx, dy) || 1;
+
+    const startPos: Vec2 = {
+      x: (dx / len) * originDist,
+      y: (dy / len) * originDist,
+    };
+
+    const vel: Vec2 = {
+      x: (dx / len) * speed,
+      y: (dy / len) * speed,
+    };
+
+    return this.addParticle(startPos, vel, 4, Date.now());
+  }
+
+  /**
+   * Directly excite an edge via physical bowing gesture (mouse or touch dragging).
+   * Generates a synthetic CollisionEvent without needing a free particle.
+   */
+  bowEdge(
+    level: number,
+    edgeIndex: number,
+    bowSpeed: number,
+    contactParam = 0.5,
+  ): CollisionEvent | null {
+    const pent = this.pentagons.find(p => p.level === level) ?? this.pentagons[0];
+    if (!pent || !pent.edges[edgeIndex]) return null;
+
+    const edge = pent.edges[edgeIndex];
+    const impactPoint: Vec2 = {
+      x: edge.p1.x + contactParam * (edge.p2.x - edge.p1.x),
+      y: edge.p1.y + contactParam * (edge.p2.y - edge.p1.y),
+    };
+
+    const dummyParticle: ParticleState = {
+      pos: impactPoint,
+      vel: { x: edge.normal.x * -bowSpeed, y: edge.normal.y * -bowSpeed },
+      radius: 3,
+      id: -1,
+    };
+
+    return {
+      particle: dummyParticle,
+      edge,
+      pentagon: pent,
+      impactPoint,
+      impactParam: contactParam,
+      impactSpeed: bowSpeed,
+      timestamp: this.time,
+    };
+  }
 }
+

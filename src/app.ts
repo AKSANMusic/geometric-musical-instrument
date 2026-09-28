@@ -1071,6 +1071,13 @@ function setupKeyboardListeners(): void {
     if (chord) {
       e.preventDefault();
       startHeldChord(chord.id, key);
+
+      // Launch targeted impulse to excite the physical polygon geometry soundboard
+      const edgeIdx = ['a', 's', 'd', 'f', 'g', 'h', 'j'].indexOf(key.toLowerCase());
+      if (edgeIdx >= 0 && pentagons[0]) {
+        physicsEngine?.launchTargetedImpulse(0, edgeIdx % pentagons[0].edges.length, 480, 0.5);
+        document.querySelector(`.acc-btn[data-key="${key.toLowerCase()}"]`)?.classList.add('active');
+      }
       return;
     }
   });
@@ -1090,6 +1097,7 @@ function setupKeyboardListeners(): void {
     const chord = findChordByHotkey(key);
     if (chord) {
       stopHeldChord(chord.id, key);
+      document.querySelector(`.acc-btn[data-key="${key.toLowerCase()}"]`)?.classList.remove('active');
       return;
     }
   });
@@ -1158,6 +1166,62 @@ function mainLoop(timestamp: number): void {
   requestAnimationFrame(mainLoop);
 }
 
+// ─── Left Hand Accordion & Modal Drone Performance Console ──────────────────
+
+function initAccordionConsole(): void {
+  const accBtns = document.querySelectorAll<HTMLElement>('.acc-btn');
+  accBtns.forEach(btn => {
+    const key = btn.getAttribute('data-key');
+    if (!key) return;
+
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      btn.classList.add('active');
+      const chord = findChordByHotkey(key);
+      if (chord) {
+        startHeldChord(chord.id, key);
+        const edgeIdx = ['a', 's', 'd', 'f', 'g', 'h', 'j'].indexOf(key);
+        if (edgeIdx >= 0 && pentagons[0]) {
+          physicsEngine?.launchTargetedImpulse(0, edgeIdx % pentagons[0].edges.length, 480, 0.5);
+        }
+      }
+    });
+
+    const release = () => {
+      btn.classList.remove('active');
+      const chord = findChordByHotkey(key);
+      if (chord) {
+        stopHeldChord(chord.id, key);
+      }
+    };
+
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointerleave', release);
+  });
+}
+
+function initDroneControls(): void {
+  const droneToggleBtn = document.getElementById('drone-toggle-btn') as HTMLButtonElement | null;
+  const droneVolumeSlider = document.getElementById('drone-volume') as HTMLInputElement | null;
+
+  droneToggleBtn?.addEventListener('click', () => {
+    if (!audioRenderer) return;
+    if (audioRenderer.isDroneActive) {
+      audioRenderer.stopDrone(0.5);
+      droneToggleBtn.textContent = '🎵 DRONE: OFF';
+      droneToggleBtn.classList.remove('active');
+    } else {
+      audioRenderer.startDrone(config.scaleKey || 'shur', config.baseFrequency / 2);
+      droneToggleBtn.textContent = '🎵 DRONE: ON';
+      droneToggleBtn.classList.add('active');
+    }
+  });
+
+  droneVolumeSlider?.addEventListener('input', () => {
+    audioRenderer?.setDroneVolume(parseFloat(droneVolumeSlider.value));
+  });
+}
+
 // ─── Event Handlers ──────────────────────────────────────────────────────────
 
 startBtn.addEventListener('click', async () => {
@@ -1165,7 +1229,7 @@ startBtn.addEventListener('click', async () => {
   config.scalingFactor = parseFloat(scalingSelect.value);
   config.rootKey = rootSelect.value;
   config.scaleKey = scaleSelect.value;
-  config.timbreKey = timbreSelect?.value || 'santur';
+  config.timbreKey = timbreSelect?.value || 'swamCello';
   config.reverbMix = reverbSlider ? parseFloat(reverbSlider.value) : 0.38;
   config.noteDuration = decaySlider ? parseFloat(decaySlider.value) : 1.8;
 
@@ -1182,10 +1246,12 @@ startBtn.addEventListener('click', async () => {
   // Initialize canvas
   canvasRenderer = new CanvasRenderer(canvas);
 
-  // Build geometry, physics, chord UI & Circle of Fifths
+  // Build geometry, physics, chord UI, Accordion Console & Circle of Fifths
   initGeometry();
   initPhysics();
   initChordButtons();
+  initAccordionConsole();
+  initDroneControls();
   initCircleOfFifthsDial();
   initRangeControls();
   setupKeyboardListeners();
@@ -1369,12 +1435,26 @@ canvas.addEventListener('pointermove', (e: PointerEvent) => {
   }
 
   if (e.buttons === 1) {
-    pluckAtCoordinates(e.clientX, e.clientY, 95);
+    const dx = e.movementX || 0;
+    const dy = e.movementY || 0;
+    const speed = Math.min(1.0, Math.hypot(dx, dy) / 20);
+
+    if (hit && speed > 0.04) {
+      // Direct acoustic bowing of the string/edge
+      const force = 0.5 + 0.4 * (1 - hit.param);
+      const contactPoint = 0.05 + 0.25 * hit.param;
+      audioRenderer?.startBowing(hit.edge.frequency, speed, force, contactPoint, (hit.edge.index / 2) - 1);
+      canvasRenderer.addBowTrailPoint(canvasX, canvasY, speed, force);
+    } else {
+      pluckAtCoordinates(e.clientX, e.clientY, 95);
+    }
   }
 });
 
 canvas.addEventListener('pointerup', () => {
   lastPluckedKey = null;
+  audioRenderer?.stopBowing();
+  canvasRenderer?.clearBowTrail();
 });
 
 canvas.addEventListener('pointerleave', () => {
@@ -1382,6 +1462,8 @@ canvas.addEventListener('pointerleave', () => {
     canvasRenderer.hoveredEdge = null;
   }
   lastPluckedKey = null;
+  audioRenderer?.stopBowing();
+  canvasRenderer?.clearBowTrail();
 });
 
 window.addEventListener('resize', () => {
