@@ -432,12 +432,4 @@ export class MidiManager {
       this.onCCIn?.(cc, value, channel);
     }
   }
-
-  /**
-   * Handle canonical MusicalEvent from the V2 pipeline
-   */
-  public handleMusicalEvent(event: { pitchHz: number; velocity: number; duration: number }): void {
-    const midiVelocity = Math.max(1, Math.min(127, Math.round(event.velocity * 127)));
-    this.sendNoteOn(event.pitchHz, midiVelocity, event.duration);
-  }
 }
